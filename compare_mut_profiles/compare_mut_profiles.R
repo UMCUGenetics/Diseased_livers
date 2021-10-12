@@ -111,7 +111,7 @@ SAMPLE_BLACKLIST <- unlist(c(
    names(which(rowSums(contexts_raw$indel)<100))
 ))
 
-DISEASED_LIVER_GROUPS <- c("Healthy","ALC","NASH","PSC","HCC_multibiopsy","PCAWG_HCC","PCAWG_CCA")
+DISEASED_LIVER_GROUPS <- c("Healthy","ALC","NASH","PSC","PCAWG_HCC","PCAWG_CCA")
 
 metadata <- subset(
    metadata_raw, 
@@ -122,19 +122,20 @@ metadata <- subset(
 #metadata <- metadata[naturalorder(metadata$sample_name),]
 
 metadata$exp_group <- factor(metadata$exp_group, DISEASED_LIVER_GROUPS)
-metadata <- metadata[order(metadata$exp_group),]
+2 <- metadata[order(metadata$exp_group),]
 
 metadata$sample_group <- factor(metadata$sample_group, unique(metadata$sample_group))
 metadata$sample_name <- factor(metadata$sample_name, unique(metadata$sample_name))
+metadata$sample_name_2 <- factor(metadata$sample_name_2, unique(metadata$sample_name_2))
 
 ## Add short sample name
 metadata$sample_name_short <- (function(){
-   v <- as.character(metadata$sample_name)
+   v <- as.character(metadata$sample_name_2)
    for(i in unique(metadata$exp_group)){
       v <- gsub(i,'',v)
    }
    v <- gsub('^\\.','',v)
-   v <- gsub('CLONE','',v)
+   #v <- gsub('CLONE','',v)
    return(v)
 })()
 
@@ -161,7 +162,7 @@ DISEASED_LIVER_COLORS <- c(
    ALC="#E41A1C",
    NASH="#377EB8",
    PSC="#4DAF4A",
-   HCC_multibiopsy="#984EA3",
+   #HCC_multibiopsy="#984EA3",
    PCAWG_HCC="#FF7F00",
    PCAWG_CCA="#F781BF"
 )
@@ -318,7 +319,7 @@ calcMutsPerYr <- function(mut_load){
    ##   Compare mut accumulation in disease vs healthy liver
    
    main <- function(df){
-      #df=subset(mut_load, mut_type=='indel')
+      #df=subset(mut_load, mut_type=='snv')
       df_split <- split(df, df$exp_group)
       df_split <- df_split[sapply(df_split,nrow)!=0]
       lm_summ <- lapply(df_split, function(i){
@@ -339,6 +340,8 @@ calcMutsPerYr <- function(mut_load){
          return(out)
       })
       lm_summ <- as.data.frame(do.call(rbind, lm_summ))
+      lm_summ$n <- lm_summ$df+1
+      
       rownames(lm_summ) <- unique(df$exp_group)
       lm_summ$pvalue <- NULL ## This is the pvalue for the lines themselves, not the z-test between healthy vs disease
       
@@ -398,7 +401,7 @@ calcMutsPerYr <- function(mut_load){
       # df_y <- length(y)-1
       # f_test(var_x, df_x, var_y, df_y, alternative='greater')
       
-      cbind(
+      lm_summ <- cbind(
          lm_summ,
          f_test(
             variance1=lm_summ[,'variance'], 
@@ -408,6 +411,38 @@ calcMutsPerYr <- function(mut_load){
             alternative='greater'
          )
       )
+      
+      ## Z-test power analysis
+      ## Cohen's d = abs(mean1-mean2)/pooled_sd;
+      # cohens_d <- function(n1, b1, var1, n2, b2, var2){
+      #    ## Pooled variance: https://www.statology.org/pooled-variance-in-r/
+      #    pooled_var <- ((n1-1)*var1 + (n2-1)*var2) / (n1+n2-2)
+      #    abs(b1-b2) / sqrt(pooled_var)
+      # }
+      # 
+      # lm_summ$cohens_d <- cohens_d(
+      #    n1=  lm_summ[,'n'],
+      #    b1=  lm_summ[,'slope'],
+      #    var1=lm_summ[,'variance'],
+      #    n2=  lm_summ['Healthy','n'],
+      #    b2=  lm_summ['Healthy','slope'],
+      #    var2=lm_summ['Healthy','variance']
+      # )
+      # 
+      # pwr::cohen.ES(test='t', size='large')
+      # 
+      # pwr::pwr.t2n.test(n1=5, n2=8, sig.level=0.05, power=0.8, alternative='greater')
+      # pwr::pwr.t2n.test(n1=3, n2=8, sig.level=0.05, power=0.8, alternative='greater')
+      # 
+      # 
+      # pwr::pwr.t.test(
+      #    n=NULL,
+      #    d=0.5,
+      #    sig.level=0.05, power=0.8, alternative='greater'
+      # )
+
+      
+      return(lm_summ)
    }
    
    l_lm_summ <- split(mut_load, mut_load$mut_type)
@@ -427,8 +462,7 @@ calcMutsPerYr <- function(mut_load){
    
    return(out)
 }
-
-calcMutsPerYr(mut_load)
+#calcMutsPerYr(mut_load)
 
 plotMutsPerYr <- function(df_raw, show.sample.numbers=F, exp.group.colors=NULL, drop.legend.levels=F){
    #exp.group.colors=DISEASED_LIVER_COLORS
@@ -592,10 +626,9 @@ plotMutsPerYr <- function(df_raw, show.sample.numbers=F, exp.group.colors=NULL, 
    }
    
    if(show.sample.numbers){
-      
       p <- p + 
          geom_text_repel(
-            aes(label=color_label, color=exp_group), 
+            aes(label=sample_name_short, color=exp_group), 
             max.overlaps=20, size=2, segment.size=0.3, show.legend=F
          )
    }
@@ -604,35 +637,6 @@ plotMutsPerYr <- function(df_raw, show.sample.numbers=F, exp.group.colors=NULL, 
 }
 
 if(WRITE_OUTPUT){
-   # ## Footprint + PCAWG
-   # plotMutsPerYrWrapper <- function(mut.types=c('snv','indel')){
-   #    p1 <-
-   #       plotMutsPerYr(
-   #          subset(mut_load, mut_type %in% mut.types & (cohort=='Footprint' | exp_group=='Healthy') & exp_group!='HCC_multibiopsy'),
-   #          exp.group.colors=DISEASED_LIVER_COLORS,
-   #          show.sample.numbers=T
-   #       ) +
-   #       theme(
-   #          legend.position='none',
-   #          strip.text.y=element_blank()
-   #       )
-   # 
-   #    p2 <-
-   #       plotMutsPerYr(
-   #          subset(mut_load, mut_type %in% mut.types & (cohort=='PCAWG' | exp_group=='Healthy') & exp_group!='HCC_multibiopsy'),
-   #          exp.group.colors=DISEASED_LIVER_COLORS,
-   #          show.sample.numbers=F
-   #       ) +
-   #       theme(axis.title.y=element_blank())
-   # 
-   #    plot_grid(p1, p2, axis='tblr', nrow=1, rel_widths=c(1,1))
-   # }
-   # 
-   # pdf(paste0(wd,'/plots/muts_per_yr.pdf'), 10, 4)
-   # plotMutsPerYrWrapper(c('snv','indel'))
-   # plotMutsPerYrWrapper(c('dbs','sv'))
-   # dev.off()
-   
    ## Footprint only
    pdf(paste0(wd,'/plots/muts_per_yr.footprint.pdf'), 8, 4.5)
    plotMutsPerYr(
@@ -877,7 +881,7 @@ fitToSignaturesWrapper <- function(contexts){
          mut.context.counts=contexts[[i]],
          signature.profiles=sig_profiles[[i]],
          #max.delta=0.001,
-         use.r.implementation=F
+         use.lsq.r=F
       )
    })
    names(sig_contribs) <- mut_types
@@ -1028,8 +1032,9 @@ if(WRITE_OUTPUT){
 
       l <- c(l_contexts, l_sigs)
       l <- lapply(l, function(i){
+         sample_names <- metadata$sample_name_2[ match(rownames(i), metadata$sample_name) ]
          data.frame(
-            sample=rownames(i), i,
+            sample=sample_names, i,
             row.names=NULL, check.names=F
          )
       })
@@ -1314,7 +1319,7 @@ p_oncoprint <- (function(){
 })()
 
 if(WRITE_OUTPUT){
-   pdf(paste0(wd,'/plots/oncoprint.pdf'), 10, 10)
+   pdf(paste0(wd,'/plots/oncoprint.pdf'), 10, 9)
    plot(p_oncoprint)
    dev.off()
 }
@@ -1399,7 +1404,7 @@ if(WRITE_OUTPUT){
 ploidy <- read.delim(paste0(base_dir,'/scripts/extract_aneuploidy/m_ploidy.txt.gz'), check.names=F)
 ploidy <- as.matrix(ploidy)
 
-DISEASED_LIVER_GROUPS_2 <- c("Healthy","ALC","NASH","PSC","HCC_multibiopsy.raw","PCAWG_HCC","PCAWG_CCA")
+DISEASED_LIVER_GROUPS_2 <- c("Healthy","ALC","NASH","PSC","PCAWG_HCC","PCAWG_CCA")
 metadata2 <- subset(
    metadata_raw, 
    !(sample_name %in% SAMPLE_BLACKLIST) & exp_group %in% DISEASED_LIVER_GROUPS_2,
@@ -1446,7 +1451,7 @@ p_ploidy <- (function(){
       )
 })()
 
-pdf(paste0(wd,'/plots/ploidy.pdf'), 10, 11)
+pdf(paste0(wd,'/plots/ploidy.pdf'), 11, 9)
 plot(p_ploidy)
 dev.off()
 
