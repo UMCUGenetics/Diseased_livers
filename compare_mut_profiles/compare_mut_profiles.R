@@ -462,7 +462,33 @@ calcMutsPerYr <- function(mut_load){
    
    return(out)
 }
-#calcMutsPerYr(mut_load)
+if(F){
+   param_grid <- expand.grid(
+      c('Healthy','ALC','NASH','PSC'),
+      c('snv','dbs','indel','sv')
+   )
+   colnames(param_grid) <- c('exp_group','mut_type')
+   do.call(rbind, lapply(1:nrow(param_grid), function(i){
+      #i=1
+      i_exp_group <- as.character(param_grid$exp_group[i])
+      i_mut_type <- as.character(param_grid$mut_type[i])
+      
+      df <- subset(mut_load, exp_group==i_exp_group & mut_type==i_mut_type)
+      group_means <- aggregate(df$count, list(df$sample_group), mean)$x
+      test_out <- shapiro.test(group_means)
+      
+      # test_out <- shapiro.test(
+      #    subset(mut_load, exp_group==i_exp_group & mut_type==i_mut_type, count, drop=T)
+      # )
+      data.frame(
+         exp_group=i_exp_group,
+         mut_type=i_mut_type,
+         pvalue=test_out$p.value
+      )
+   }))
+   
+
+}
 
 plotMutsPerYr <- function(df_raw, show.sample.numbers=F, exp.group.colors=NULL, drop.legend.levels=F){
    #exp.group.colors=DISEASED_LIVER_COLORS
